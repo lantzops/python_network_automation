@@ -2,16 +2,71 @@ import csv
 import subprocess
 import platform 
 from datetime import datetime
+from ipaddress import ip_address
 
+def is_valid_ipv4(address: str) -> bool:
+    try:
+        return ip_address(address).version == 4
+    except ValueError:
+        return False
 
+now = datetime.now()
 
+print("Device Status and DNS Verification")
+print("Checked at:", now)
+print(f"{'Device':<10} {'Address' :<16} {'Ping Status':<14} DNS Status")
+print("-" * 80)
+
+ping_count_flag = "-n" if platform.system().lower() == "windows" else "-c"
 
 with open("network_devices.csv") as file:
     reader = csv.DictReader(file)
     for row in reader:
-        subprocess.run( ping -c 1 (row["Device Address"]))
+        address = (row["Device Address"])
+        name = (row["Device Name"])
+        if address == "DHCP":
+            ping_status = "Skipped"
+            dns_status = "Skipped - DHCP address"
+        elif address == "None":
+            ping_status = "Skipped"
+            dns_status = "Skipped - No IP Address"
+        elif is_valid_ipv4(address):
+            try:
+                process_result = subprocess.run(
+                        ["ping", ping_count_flag, "1", address],
+                        capture_output=True,
+                        text=True,
+                        timeout=3
+                        )
+
+                if process_result.returncode == 0:
+                    ping_status = "Reachable"
+                    dns_status = "DNS verification requires active device network access"
+                else:
+                    ping_status = "Unreachable"
+                    dns_status = "Not verified - device unreachable"
+
+            except subprocess.TimeoutExpired:
+                ping_status = "Timeout"
+                dns_status = "Not Verified = ping timeout"
+            
+        else:
+            ping_status = "Skipped"
+            dns_status = "Skipped - invalid ipv4 address"
+
+        print(f"{name:<10} {address:<16} {ping_status:<14} {dns_status}")
+
+
+            
+                
+
+
+    
+        
 
 
 
+
+                
 
 
