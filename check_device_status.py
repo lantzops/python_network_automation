@@ -11,19 +11,29 @@ def is_valid_ipv4(address: str) -> bool:
         return False
 
 now = datetime.now()
+timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
 print("Device Status and DNS Verification")
-print("Checked at:", now)
+print("Checked at:", timestamp_str)
 print(f"{'Device':<10} {'Address' :<16} {'Ping Status':<14} DNS Status")
 print("-" * 80)
 
 ping_count_flag = "-n" if platform.system().lower() == "windows" else "-c"
 
-with open("network_devices.csv") as file:
-    reader = csv.DictReader(file)
+with open("network_devices.csv") as infile, \
+     open("device_status_results.csv", "w", newline='') as outfile:   
+    
+    reader = csv.DictReader(infile)
+
+    fieldnames = ["Device Name", "Device Address", "Ping Status", 
+                 "DNS Status", "Checked At"]
+    writer = csv.DictWriter(outfile, fieldnames=fieldnames)
+    writer.writeheader()
+
     for row in reader:
         address = (row["Device Address"])
         name = (row["Device Name"])
+
         if address == "DHCP":
             ping_status = "Skipped"
             dns_status = "Skipped - DHCP address"
@@ -48,13 +58,23 @@ with open("network_devices.csv") as file:
 
             except subprocess.TimeoutExpired:
                 ping_status = "Timeout"
-                dns_status = "Not Verified = ping timeout"
+                dns_status = "Not Verified - ping timeout"
             
         else:
             ping_status = "Skipped"
             dns_status = "Skipped - invalid ipv4 address"
 
         print(f"{name:<10} {address:<16} {ping_status:<14} {dns_status}")
+
+        writer.writerow({
+            "Device Name": name,
+            "Device Address": address,
+            "Ping Status": ping_status,
+            "DNS Status": dns_status,
+            "Checked At": timestamp_str
+        })
+
+print("Results have been saved to 'device_status_results.csv'")
 
 
             

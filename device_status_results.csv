@@ -1,0 +1,17 @@
+Device Name,Device Address,Ping Status,DNS Status,Checked At
+API,10.10.10.200,Timeout,Not Verified - ping timeout,2026-06-24 13:09:55
+DB,10.10.10.210,Timeout,Not Verified - ping timeout,2026-06-24 13:09:55
+DNS1,10.10.10.10,Reachable,DNS verification requires active device network access,2026-06-24 13:09:55
+DNS2,10.10.10.20,Timeout,Not Verified - ping timeout,2026-06-24 13:09:55
+PC1,DHCP,Skipped,Skipped - DHCP address,2026-06-24 13:09:55
+PC2,DHCP,Skipped,Skipped - DHCP address,2026-06-24 13:09:55
+PC3,DHCP,Skipped,Skipped - DHCP address,2026-06-24 13:09:55
+PC4,DHCP,Skipped,Skipped - DHCP address,2026-06-24 13:09:55
+ROUTER1,10.10.10.1,Timeout,Not Verified - ping timeout,2026-06-24 13:09:55
+SMTP,10.10.10.100,Timeout,Not Verified - ping timeout,2026-06-24 13:09:55
+SVR1,192.168.20.210,Timeout,Not Verified - ping timeout,2026-06-24 13:09:55
+SVR2,192.168.30.210,Timeout,Not Verified - ping timeout,2026-06-24 13:09:55
+SW1,None,Skipped,Skipped - No IP Address,2026-06-24 13:09:55
+SW2,None,Skipped,Skipped - No IP Address,2026-06-24 13:09:55
+SW3,None,Skipped,Skipped - No IP Address,2026-06-24 13:09:55
+SW4,None,Skipped,Skipped - No IP Address,2026-06-24 13:09:55
