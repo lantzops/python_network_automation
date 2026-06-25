@@ -3,6 +3,7 @@ import subprocess
 import platform 
 from datetime import datetime
 from ipaddress import ip_address
+import paramiko 
 
 def is_valid_ipv4(address: str) -> bool:
     try:
@@ -12,6 +13,9 @@ def is_valid_ipv4(address: str) -> bool:
 
 now = datetime.now()
 timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+client = paramiko.SSHClient()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 print("Device Status and DNS Verification")
 print("Checked at:", timestamp_str)
@@ -31,8 +35,13 @@ with open("network_devices.csv") as infile, \
     writer.writeheader()
 
     for row in reader:
-        address = (row["Device Address"])
-        name = (row["Device Name"])
+        address = row["Device Address"].strip()
+        name = row["Device Name"].strip()
+        access_port = row["Access Port"].strip()
+        os = row["OS"].strip()
+        username = row["Username"].strip()
+        password = row["Password"].strip()
+
 
         if address == "DHCP":
             ping_status = "Skipped"
@@ -51,7 +60,32 @@ with open("network_devices.csv") as infile, \
 
                 if process_result.returncode == 0:
                     ping_status = "Reachable"
-                    dns_status = "DNS verification requires active device network access"
+                    try:
+                        client.connect(
+                                hostname="localhost",
+                                port=int(access_port),
+                                username=username,
+                                password=password,
+                                timeout=10,
+                                look_for_keys=False,
+                                allow_agent=False,)
+                        stdin, stdout, stderr = client.exec_command("resolvectl dns")
+                        command_output = stdout.read().decode().strip()
+                        command_error = stderr.read().decode().strip()
+
+                        if command_output:
+                            dns_status = command_output
+
+                        elif command_error: 
+                            dns_status = command_error
+
+                        else:
+                            dns_status = "DNS settings not found"
+
+                        client.close()
+                    except Exception as error:
+                        dns_status = f"DNS check failed: {error}"
+
                 else:
                     ping_status = "Unreachable"
                     dns_status = "Not verified - device unreachable"
