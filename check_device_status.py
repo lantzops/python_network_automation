@@ -4,6 +4,8 @@ import platform
 from datetime import datetime
 from ipaddress import ip_address
 import paramiko 
+import re
+import socket
 
 def is_valid_ipv4(address: str) -> bool:
     try:
@@ -16,6 +18,8 @@ timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+APPROVED_DNS_SERVERS = {"10.10.10.10", "10.10.10.20", "127.0.0.1"}
 
 print("Device Status and DNS Verification")
 print("Checked at:", timestamp_str)
@@ -37,8 +41,8 @@ with open("network_devices.csv") as infile, \
     for row in reader:
         address = row["Device Address"].strip()
         name = row["Device Name"].strip()
-        access_port = row["Access Port"].strip()
         os = row["OS"].strip()
+        port_name = row["Access Port"].strip()
         username = row["Username"].strip()
         password = row["Password"].strip()
 
@@ -49,40 +53,65 @@ with open("network_devices.csv") as infile, \
         elif address == "None":
             ping_status = "Skipped"
             dns_status = "Skipped - No IP Address"
+        elif name == "SMTP":
+            try:
+                with socket.create_connection((address, 1025), timeout=5):
+                    ping_status = "Reachable"
+                    dns_status = "SMTP service reachable on port 1025; DNS shell check unavailable"
+            except OSError as error:
+                ping_status = f"Unreachable: {error}"
+
         elif is_valid_ipv4(address):
             try:
                 process_result = subprocess.run(
                         ["ping", ping_count_flag, "1", address],
                         capture_output=True,
                         text=True,
-                        timeout=3
+                        timeout=9
                         )
 
                 if process_result.returncode == 0:
                     ping_status = "Reachable"
                     try:
-                        client.connect(
-                                hostname="localhost",
-                                port=int(access_port),
-                                username=username,
-                                password=password,
-                                timeout=10,
-                                look_for_keys=False,
-                                allow_agent=False,)
-                        stdin, stdout, stderr = client.exec_command("resolvectl dns")
-                        command_output = stdout.read().decode().strip()
-                        command_error = stderr.read().decode().strip()
+                        if os.lower() == "ubuntu":
+                            client.connect(
+                                    hostname=address,
+                                    port=22,
+                                    username=username,
+                                    password=password,
+                                    timeout=10,
+                                    look_for_keys=False,
+                                    allow_agent=False,)
+                            stdin, stdout, stderr = client.exec_command("resolvectl dns")
+                            command_output = stdout.read().decode().strip()
+                            command_error = stderr.read().decode().strip()
 
-                        if command_output:
-                            dns_status = command_output
+                            if command_output:
+                                clean_dns_output = " | ".join(command_output.splitlines())
+                                dns_status = clean_dns_output
+                                dns_servers_found = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", dns_status)
+                                unauthorized_dns = [
+                                        server for server in dns_servers_found
+                                        if server not in APPROVED_DNS_SERVERS
+                                        ]
+                                if unauthorized_dns:
+                                    dns_status = f"{dns_status} | Unauthorized DNS detected: {', '.join(unauthorized_dns)}"
 
-                        elif command_error: 
-                            dns_status = command_error
+                            elif command_error: 
+                                clean_dns_error = " | ".join(command_error.splitlines())
+                                dns_status = clean_dns_error
+
+                            else:
+                                dns_status = "DNS settings not found"
+
+                            client.close()
+                        
+                        elif os == "VyOS":
+                            dns_status = "Skipped - DNS command not supported for VyOS"
 
                         else:
-                            dns_status = "DNS settings not found"
+                            dns_status = f"Skipped - no supported DNS Verification Method"
 
-                        client.close()
                     except Exception as error:
                         dns_status = f"DNS check failed: {error}"
 
