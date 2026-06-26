@@ -112,6 +112,43 @@ for device in affected_devices:
         if apply_error:
             print(f"Netplan apply message: {apply_error}")
 
+
+        set_link_dns_output, set_link_dns_error = run_remote_command(
+            client,
+            "sudo resolvectl dns ens3 10.10.10.10 10.10.10.20"
+        )
+
+        if set_link_dns_output:
+            print(set_link_dns_output)
+
+        if set_link_dns_error:
+            print(f"resolvectl dns message: {set_link_dns_error}")
+
+
+        set_domain_output, set_domain_error = run_remote_command(
+            client,
+            "sudo resolvectl domain ens3 '~.'"
+        )
+
+        if set_domain_output:
+            print(set_domain_output)
+
+        if set_domain_error:
+            print(f"resolvectl domain message: {set_domain_error}")
+
+
+        flush_output, flush_error = run_remote_command(
+            client,
+            "sudo resolvectl flush-caches"
+        )
+
+        if flush_output:
+            print(flush_output)
+
+        if flush_error:
+            print(f"flush-caches message: {flush_error}")
+
+
         restart_output, restart_error = run_remote_command(client, "sudo systemctl restart systemd-resolved")
 
         if restart_output:
