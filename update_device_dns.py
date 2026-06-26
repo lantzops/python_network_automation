@@ -4,7 +4,7 @@ import paramiko
 from datetime import datetime
 
 RESULTS_FILE = "device_status_results.csv"
-APPROVED_DNS_SERVERS = ["10.10.10.10", "10.10.10.20"]
+APPROVED_DNS_SERVERS = ["10.10.10.10", "10.10.10.20","127.0.0.1"]
 USERNAME = "ubuntu"
 PASSWORD = "ubuntu"
 
@@ -41,7 +41,10 @@ with open(RESULTS_FILE) as file:
 
     for row in reader:
         dns_status = row.get("DNS Status", "")
-        unauthorized_dns = find_unauthorized_dns(dns_status)
+        unauthorized_dns = []
+
+        if "Unauthorized DNS detected" in dns_status:
+            unauthorized_dns = find_unauthorized_dns(dns_status)
 
         if unauthorized_dns:
             affected_devices.append({
@@ -100,7 +103,7 @@ for device in affected_devices:
 
             if error:
                 print(f"Replacement error: {error}")
-
+ 
         apply_output, apply_error = run_remote_command(client, "sudo netplan apply")
 
         if apply_output:
@@ -108,6 +111,14 @@ for device in affected_devices:
 
         if apply_error:
             print(f"Netplan apply message: {apply_error}")
+
+        restart_output, restart_error = run_remote_command(client, "sudo systemctl restart systemd-resolved")
+
+        if restart_output:
+            print(restart_output)
+
+        if restart_error:
+            print(f"systemd-resolved restart message: {restart_error}")
 
         after_output, after_error = run_remote_command(client, "resolvectl dns")
 
@@ -125,6 +136,21 @@ for device in affected_devices:
 
         if remaining_unauthorized:
             print(f"DNS update incomplete. Still found: {', '.join(remaining_unauthorized)}")
+
+            for unauthorized_server in remaining_unauthorized:
+                grep_command = (
+                    f"sudo grep -R \"{unauthorized_server}\" -n "
+                    "/etc/netplan /etc/systemd/resolved.conf /etc/systemd/resolved.conf.d 2>/dev/null || true"
+                )
+
+                grep_output, grep_error = run_remote_command(client, grep_command)
+
+                if grep_output:
+                    print(f"Remaining config refrences for {unauthorized_server}:")
+                    print(grep_output)
+
+                if grep_error:
+                    print(f"Config search error for {unauthorized_server}: {grep_error}")
         else:
             print(f"DNS settings update completed for {device['name']}")
 
