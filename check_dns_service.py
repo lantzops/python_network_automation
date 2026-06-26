@@ -15,32 +15,43 @@ print(f"Server: {DNS_SERVER_NAME} ({DNS_SERVER_IP})")
 print(f"Service: {SERVICE_NAME}")
 print("-" * 80)
 
-client = paramiko.SSHClient()
-client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client = None
 
-client.connect(
-    hostname=DNS_SERVER_IP,
-    port=22,
-    username=USERNAME,
-    password=PASSWORD,
-    timeout=10,
-    look_for_keys=False,
-    allow_agent=False,
-)
+try:
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-stdin, stdout, stderr = client.exec_command(f"systemctl is-active {SERVICE_NAME}")
+    client.connect(
+        hostname=DNS_SERVER_IP,
+        port=22,
+        username=USERNAME,
+        password=PASSWORD,
+        timeout=10,
+        look_for_keys=False,
+        allow_agent=False,
+    )
 
-service_status = stdout.read().decode().strip()
-service_error = stderr.read().decode().strip()
+    stdin, stdout, stderr = client.exec_command(f"systemctl is-active {SERVICE_NAME}")
 
-if service_status == "active":
-    print("DNS service status: active")
-    print("DNS service is running")
-else:
-    print(f"DNS service status: {service_status}")
-    print("DNS service is down")
+    service_status = stdout.read().decode().strip()
+    service_error = stderr.read().decode().strip()
+    stdin.close()
+    stdout.close()
+    stderr.close()
 
-if service_error:
-    print(f"Service check error: {service_error}")
 
-client.close()
+    if service_status == "active":
+        print("DNS service status: active")
+        print("DNS service is running")
+    else:
+        print(f"DNS service status: {service_status}")
+        print("DNS service is down")
+
+    if service_error:
+        print(f"Service check error: {service_error}")
+except Exception as error:
+    print(f"DNS service check failed: {error}")
+
+finally:
+    if client:
+        client.close()
