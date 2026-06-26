@@ -72,22 +72,22 @@ for device in affected_devices:
         with urllib.request.urlopen(request, timeout=10) as response:
             response_status = response.status
             response_body = response.read().decode("utf-8")
+            response_data = json.loads(response_body)
 
         print(f"Created ticket for {device['name']}")
-        print("-" * 80)
         print(f"Response status: {response_status}")
-        print("-" * 80)
-        print(f"Response body: {response_body}")
+        print(f"Ticket ID: {response_data.get('id')}")
+        print(f"Ticket status: {response_data.get('status')}")
+        print(f"Ticket title: {response_data.get('title')}")
         print("-" * 80)
 
     except urllib.error.HTTPError as error:
         error_body = error.read().decode("utf-8")
         print(f"Ticket creation failed for {device['name']}")
-        print("-" * 80)
         print(f"Response status: {error.code}")
         print("-" * 80)
         print(f"Response body: {error_body}")
-        print("-" * 80)
+       
     except urllib.error.URLError as error:
         print(f"Connection failed for {device['name']}: {error}")
 
