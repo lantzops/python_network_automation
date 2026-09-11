@@ -87,8 +87,6 @@ def get_dhcp_leases_from_vyos():
 now = datetime.now()
 timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
-client = paramiko.SSHClient()
-client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 APPROVED_DNS_SERVERS = {"10.10.10.10", "10.10.10.20", "127.0.0.1"}
 
@@ -100,10 +98,6 @@ print("-" * 80)
 ping_count_flag = "-n" if platform.system().lower() == "windows" else "-c"
 
 dhcp_leases = get_dhcp_leases_from_vyos()
-
-print (dhcp_leases)
-
-
 
 with open("network_devices.csv") as infile, \
      open("device_status_results.csv", "w", newline='') as outfile:   
@@ -123,10 +117,13 @@ with open("network_devices.csv") as infile, \
         username = row["Username"].strip()
         password = row["Password"].strip()
 
+        if address == "DHCP":
+            address = dhcp_leases.get(name.upper(), "DHCP")
+
 
         if address == "DHCP":
             ping_status = "Skipped"
-            dns_status = "Skipped - DHCP address"
+            dns_status = "DHCP lease unavailable; DNS not verified"
         elif address == "None":
             ping_status = "Skipped"
             dns_status = "Skipped - No IP Address"
@@ -137,6 +134,7 @@ with open("network_devices.csv") as infile, \
                     dns_status = "SMTP service reachable on port 1025; DNS shell check unavailable"
             except OSError as error:
                 ping_status = f"Unreachable: {error}"
+                dns_status = "DNS not verified; SMTP connection failed"
 
         elif is_valid_ipv4(address):
             try:
@@ -149,8 +147,12 @@ with open("network_devices.csv") as infile, \
 
                 if process_result.returncode == 0:
                     ping_status = "Reachable"
+                    client = None
+
                     try:
                         if os.lower() == "ubuntu":
+                            client = paramiko.SSHClient()
+                            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                             client.connect(
                                     hostname=address,
                                     port=22,
@@ -180,8 +182,6 @@ with open("network_devices.csv") as infile, \
 
                             else:
                                 dns_status = "DNS settings not found"
-
-                            client.close()
                         
                         elif os == "VyOS":
                             dns_status = "Skipped - DNS command not supported for VyOS"
@@ -191,6 +191,11 @@ with open("network_devices.csv") as infile, \
 
                     except Exception as error:
                         dns_status = f"DNS check failed: {error}"
+
+                    finally:
+                        if client:
+                            client.close()
+
 
                 else:
                     ping_status = "Unreachable"
@@ -203,6 +208,7 @@ with open("network_devices.csv") as infile, \
         else:
             ping_status = "Skipped"
             dns_status = "Skipped - invalid ipv4 address"
+
 
         print(f"{name:<10} {address:<16} {ping_status:<14} {dns_status}")
 
@@ -228,5 +234,4 @@ print("Results have been saved to 'device_status_results.csv'")
 
 
                 
-
 
