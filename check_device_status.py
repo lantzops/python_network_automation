@@ -13,7 +13,7 @@ RESULTS_FILE = "device_status_results"
 ROUTER_IP = "10.10.10.1"
 ROUTER_USERNAME = "vyos"
 ROUTER_PASSWORD = "vyos"
-DHCP_LEASE_COMMAND = "show dhcp server leases"
+DHCP_LEASE_COMMAND = "/opt/vyatta/bin/vyatta-op-cmd-wrapper show dhcp server leases"
 
 SMTP_SERVICE_PORT = 1025
 SSH_PORT = 22
