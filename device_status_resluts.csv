@@ -1,0 +1,17 @@
+Device Name,Device Address,Ping Status,DNS Status,Checked At
+API,10.10.10.200,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 17:55:57
+DB,10.10.10.210,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 17:55:57
+DNS1,10.10.10.10,Reachable,Global: 127.0.0.1 | Link 2 (ens3): 10.10.10.20 127.0.0.1,2026-09-11 17:55:57
+DNS2,10.10.10.20,Reachable,Global: 127.0.0.1 | Link 2 (ens3): 10.10.10.10 127.0.0.1,2026-09-11 17:55:57
+PC1,192.168.10.102,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 17:55:57
+PC2,192.168.20.101,Reachable,/etc/resolv.conf: 203.0.113.10 | Unauthorized DNS detected: 203.0.113.10,2026-09-11 17:55:57
+PC3,192.168.30.101,Reachable,/etc/resolv.conf: 203.0.113.10 | Unauthorized DNS detected: 203.0.113.10,2026-09-11 17:55:57
+PC4,192.168.10.101,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 17:55:57
+ROUTER1,10.10.10.1,Reachable,Skipped - DNS command not supported for VyOS,2026-09-11 17:55:57
+SMTP,10.10.10.100,Reachable,SMTP service reachable on port 1025; DNS shell check unavailable,2026-09-11 17:55:57
+SVR1,192.168.20.210,Reachable,/etc/resolv.conf: 203.0.113.10 | Unauthorized DNS detected: 203.0.113.10,2026-09-11 17:55:57
+SVR2,192.168.30.210,Reachable,/etc/resolv.conf: 203.0.113.10 | Unauthorized DNS detected: 203.0.113.10,2026-09-11 17:55:57
+SW1,None,Skipped,Skipped - No IP Address,2026-09-11 17:55:57
+SW2,None,Skipped,Skipped - No IP Address,2026-09-11 17:55:57
+SW3,None,Skipped,Skipped - No IP Address,2026-09-11 17:55:57
+SW4,None,Skipped,Skipped - No IP Address,2026-09-11 17:55:57
