@@ -7,11 +7,82 @@ import paramiko
 import re
 import socket
 
+NETWORK_DEVICE_FILE = "network_devices.csv"
+RESULTS_FILE = "device_status_results"
+
+ROUTER_IP = "10.10.10.1"
+ROUTER_USERNAME = "vyos"
+ROUTER_PASSWORD = "vyos"
+DHCP_LEASE_COMMAND = "show dhcp server leases"
+
+SMTP_SERVICE_PORT = 1025
+SSH_PORT = 22
+
 def is_valid_ipv4(address: str) -> bool:
     try:
         return ip_address(address).version == 4
     except ValueError:
         return False
+
+def run_remote_command(client, command):
+    stdin, stdout, stderr = client.exec_command(command)
+
+    output = stdout.read().decode().strip()
+    error = stderr.read().decode().strip()
+
+    stdin.close()
+    stdout.close()
+    stderr.close()
+
+    return output, error 
+
+def get_dhcp_leases_from_vyos():
+    client = None
+    dhcp_leases = {}
+
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        client.connect(
+                hostname=ROUTER_IP,
+                port=SSH_PORT,
+                username=ROUTER_USERNAME,
+                password=ROUTER_PASSWORD,
+                timeout=10,
+                look_for_keys=False,
+                allow_agent=False,
+        )
+        output, error = run_remote_command(client, DHCP_LEASE_COMMAND)
+
+        if error:
+            raise RuntimeError(error)
+
+        for line in output.splitlines():
+            tokens = line.split()
+            if len(tokens) < 11:
+                continue
+            ip = tokens[0]
+            status = tokens[2]
+            hostname = tokens[-2]
+
+            if not is_valid_ipv4(ip):
+                continue
+            if status.lower() != "active":
+                continue
+
+            dhcp_leases[hostname.upper()] = ip
+
+            
+    except Exception as error:
+        print(f"DHCP Lease Check Failed: {error}")
+
+    finally:
+        if client:
+            client.close()
+
+    return dhcp_leases
+
 
 now = datetime.now()
 timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -27,6 +98,12 @@ print(f"{'Device':<10} {'Address' :<16} {'Ping Status':<14} DNS Status")
 print("-" * 80)
 
 ping_count_flag = "-n" if platform.system().lower() == "windows" else "-c"
+
+dhcp_leases = get_dhcp_leases_from_vyos()
+
+print (dhcp_leases)
+
+
 
 with open("network_devices.csv") as infile, \
      open("device_status_results.csv", "w", newline='') as outfile:   
