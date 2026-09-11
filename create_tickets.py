@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-API_URL = "http://10.10.10.200:5000/api/tickets"
+API_URL = "http://helpdesk.d522.wgu.internal:5000/api/tickets"
 TOKEN_ENV_VAR = "HELPDESK_API_TOKEN"
 
 api_token = os.environ.get(TOKEN_ENV_VAR)
@@ -21,7 +21,7 @@ print(f"Created at: {created_at}")
 print("-" * 80)
 
 
-affected_devices = []
+devices = []
 
 with open("device_status_results.csv") as file:
     reader = csv.DictReader(file)
@@ -29,32 +29,39 @@ with open("device_status_results.csv") as file:
     for row in reader:
         dns_status = row.get("DNS Status", "")
 
-        if "Unauthorized DNS detected" in dns_status:
-            affected_devices.append({
-                "name": row.get("Device Name", ""),
-                "ip": row.get("Device Address", ""),
-                "service": row.get("Device Name", ""),
-                "device_status": row.get("Ping Status", ""),
-                "dns_finding": dns_status,
-                "checked_at": row.get("Checked At", ""),
-            })
+        devices.append({
+            "name": row.get("Device Name", ""),
+            "ip": row.get("Device Address", ""),
+            "service": row.get("Device Name", ""),
+            "device_status": row.get("Ping Status", ""),
+            "dns_finding": dns_status,
+            "checked_at": row.get("Checked At", ""),
+        })
 
-if not affected_devices:
-    print("No affected devices found. No tickets created.")
+if not devices:
+    print("No device results found. No tickets created.")
     raise SystemExit(0)
 
-for device in affected_devices:
+for device in devices:
+    if "Unauthorized DNS detected" in device["dns_finding"]:
+        issue_type = "Unauthorized DNS configuration"
+    else:
+        issue_type = "Device verification review"
+
+    description = (
+        f"Issue type: {issue_type}\n"
+        f"Device: {device['name']}\n"
+        f"IP address: {device['ip']}\n"
+        f"Service: {device['service']}\n"
+        f"Device status: {device['device_status']}\n"
+        f"DNS finding: {device['dns_finding']}\n"
+        f"Checked at: {device['checked_at']}"
+    )
+
     payload = {
-        "title": f"Unauthorized DNS configuration detected on {device['name']}",
+        "title": f"{issue_type}: {device['name']}",
         "status": "open",
-        "issue_type": "Unauthorized DNS configuration",
-        "device_name": device["name"],
-        "device_address": device["ip"],
-        "service": device["service"],
-        "device_status": device["device_status"],
-        "dns_finding": device["dns_finding"],
-        "checked_at": device["checked_at"],
-        "created_at": created_at,
+        "description": description,
     }
     payload_bytes = json.dumps(payload).encode("utf-8")
 
@@ -79,6 +86,7 @@ for device in affected_devices:
         print(f"Ticket ID: {response_data.get('id')}")
         print(f"Ticket status: {response_data.get('status')}")
         print(f"Ticket title: {response_data.get('title')}")
+        print(f"Ticket description: {response_data.get('description')}")
         print("-" * 80)
 
     except urllib.error.HTTPError as error:
@@ -90,7 +98,6 @@ for device in affected_devices:
        
     except urllib.error.URLError as error:
         print(f"Connection failed for {device['name']}: {error}")
-
 
 
 
