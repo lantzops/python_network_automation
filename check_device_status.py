@@ -176,9 +176,35 @@ with open("network_devices.csv") as infile, \
                                 if unauthorized_dns:
                                     dns_status = f"{dns_status} | Unauthorized DNS detected: {', '.join(unauthorized_dns)}"
 
-                            elif command_error: 
-                                clean_dns_error = " | ".join(command_error.splitlines())
-                                dns_status = clean_dns_error
+                            elif command_error:
+                                fallback_output, fallback_error = run_remote_command(
+                                    client, "cat /etc/resolv.conf"
+                                )
+
+                                if fallback_error:
+                                    dns_status = f"DNS verification failed: {fallback_error}"
+                                else:
+                                    dns_servers_found = []
+
+                                    for line in fallback_output.splitlines():
+                                        fields = line.split()
+                                        if len(fields) >= 2 and fields[0] == "nameserver":
+                                            dns_servers_found.append(fields[1])
+
+                                    if dns_servers_found:
+                                        dns_status = f"/etc/resolv.conf: {', '.join(dns_servers_found)}"
+
+                                        unauthorized_dns = [
+                                            server for server in dns_servers_found
+                                            if server not in APPROVED_DNS_SERVERS
+                                        ]
+
+                                        if unauthorized_dns:
+                                            dns_status += (
+                                                f" | Unauthorized DNS detected: {', '.join(unauthorized_dns)}"
+                                            )
+                                    else:
+                                        dns_status = "DNS not verified; no nameserver entries found"
 
                             else:
                                 dns_status = "DNS settings not found"
