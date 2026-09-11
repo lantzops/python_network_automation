@@ -4,7 +4,7 @@ import paramiko
 from datetime import datetime
 
 RESULTS_FILE = "device_status_results.csv"
-APPROVED_DNS_SERVERS = ["10.10.10.10", "10.10.10.20","127.0.0.1"]
+APPROVED_DNS_SERVERS = ["10.10.10.10", "10.10.10.20"]
 USERNAME = "ubuntu"
 PASSWORD = "ubuntu"
 
@@ -22,15 +22,18 @@ def find_unauthorized_dns(dns_status):
     return unauthorized_servers
 
 def run_remote_command(client, command):
-    stdin, stdout, stderr = client.exec_command(command)
+    stdin, stdout, stderr = client.exec_command(command, timeout=10)
 
     output = stdout.read().decode().strip()
     error = stderr.read().decode().strip()
+    exit_status = stdout.channel.recv_exit_status()
 
     stdin.close()
     stdout.close()
     stderr.close()
 
+    if exit_status != 0:
+        raise RuntimeError(f"Remote command failed (exit {exit_status}): {error or command}")
     return output, error
 
 affected_devices = []
@@ -71,7 +74,7 @@ for device in affected_devices:
     for index, unauthorized_server in enumerate(device["unauthorized_dns"]):
         approved_server = APPROVED_DNS_SERVERS[index % len(APPROVED_DNS_SERVERS)]
         replacement_commands.append(
-            f"sudo sed -i 's/{unauthorized_server}/{approved_server}/g' /etc/netplan/*.yaml"
+            f"sudo -n sed -i 's/{re.escape(unauthorized_server)}/{approved_server}/g' /etc/resolv.conf"
         )
     client = None
     try:
@@ -88,7 +91,9 @@ for device in affected_devices:
             allow_agent=False,
         )
 
-        before_output, before_error = run_remote_command(client, "resolvectl dns")
+        # Direct editing is only supported for regular files, not managed symlinks.
+        run_remote_command(client, "test -f /etc/resolv.conf && test ! -L /etc/resolv.conf")
+        before_output, before_error = run_remote_command(client, "cat /etc/resolv.conf")
 
         print(f"Updating DNS settings for {device['name']} ({device['ip']})")
         print(f"Unauthorized DNS detected: {', '.join(device['unauthorized_dns'])}")
@@ -96,79 +101,43 @@ for device in affected_devices:
         print(before_output)
 
         if before_error:
-            print(f"Before check error: {before_error}")
+            raise RuntimeError(f"Before check error: {before_error}")
+        
+        backup_path = "/etc/resolv.conf.bak." + datetime.now().strftime("%Y%m%dT%H%M%S%f")
+        backup_output, backup_error = run_remote_command(client, f"sudo -n cp -p /etc/resolv.conf {backup_path}"
+        )
+
+        if backup_error:
+            raise RuntimeError(f"DNS Backup failed: {backup_error}")
+        print(f"Backup saved on device: {backup_path}")
 
         for command in replacement_commands:
             output, error = run_remote_command(client, command)
 
             if error:
-                print(f"Replacement error: {error}")
+                raise RuntimeError(f"Replacement error: {error}")
  
-        apply_output, apply_error = run_remote_command(client, "sudo netplan apply")
-
-        if apply_output:
-            print(apply_output)
-
-        if apply_error:
-            print(f"Netplan apply message: {apply_error}")
-
-
-        set_link_dns_output, set_link_dns_error = run_remote_command(
-            client,
-            "sudo resolvectl dns ens3 10.10.10.10 10.10.10.20"
-        )
-
-        if set_link_dns_output:
-            print(set_link_dns_output)
-
-        if set_link_dns_error:
-            print(f"resolvectl dns message: {set_link_dns_error}")
-
-
-        set_domain_output, set_domain_error = run_remote_command(
-            client,
-            "sudo resolvectl domain ens3 '~.'"
-        )
-
-        if set_domain_output:
-            print(set_domain_output)
-
-        if set_domain_error:
-            print(f"resolvectl domain message: {set_domain_error}")
-
-
-        flush_output, flush_error = run_remote_command(
-            client,
-            "sudo resolvectl flush-caches"
-        )
-
-        if flush_output:
-            print(flush_output)
-
-        if flush_error:
-            print(f"flush-caches message: {flush_error}")
-
-
-        restart_output, restart_error = run_remote_command(client, "sudo systemctl restart systemd-resolved")
-
-        if restart_output:
-            print(restart_output)
-
-        if restart_error:
-            print(f"systemd-resolved restart message: {restart_error}")
-
-        after_output, after_error = run_remote_command(client, "resolvectl dns")
+        after_output, after_error = run_remote_command(client, "cat /etc/resolv.conf")
 
         print("After DNS settings:")
         print(after_output)
 
         if after_error:
-            print(f"After check error: {after_error}")
+            raise RuntimeError(f"After check error: {after_error}")
 
+        nameservers = []
+        for line in after_output.splitlines():
+            fields = line.split()
+            if fields and fields[0] == "nameserver":
+                if len(fields) < 2:
+                    raise RuntimeError("DNS verification failed: nameserver address missing")
+                nameservers.append(fields[1])
+        if not nameservers:
+            raise RuntimeError("DNS verification failed: no nameserver entries found")
         remaining_unauthorized = []
 
-        for server in device["unauthorized_dns"]:
-            if server in after_output:
+        for server in nameservers:
+            if server not in APPROVED_DNS_SERVERS:
                 remaining_unauthorized.append(server)
 
         if remaining_unauthorized:
@@ -199,6 +168,3 @@ for device in affected_devices:
     finally:
         if client:
             client.close()
-
-
-
