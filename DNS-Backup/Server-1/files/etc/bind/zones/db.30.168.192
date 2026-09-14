@@ -1,0 +1,12 @@
+$TTL    604800
+@       IN      SOA     ns1.d522.wgu.internal. admin.d522.wgu.internal. (
+                        2         ; Serial
+                        604800    ; Refresh
+                        86400     ; Retry
+                        2419200   ; Expire
+                        604800 )  ; Negative Cache TTL
+
+        IN      NS      ns1.d522.wgu.internal.
+        IN      NS      ns2.d522.wgu.internal.
+
+210     IN      PTR     svr2.d522.wgu.internal.

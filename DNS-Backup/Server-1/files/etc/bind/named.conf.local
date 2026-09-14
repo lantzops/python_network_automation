@@ -1,0 +1,23 @@
+zone "d522.wgu.internal" {
+    type master;
+    file "/etc/bind/zones/db.d522.wgu.internal";
+    allow-transfer { 10.10.10.20; };
+};
+
+zone "10.10.10.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.10.10.10";
+    allow-transfer { 10.10.10.20; };
+};
+
+zone "20.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.20.168.192";
+    allow-transfer { 10.10.10.20; };
+};
+
+zone "30.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.30.168.192";
+    allow-transfer { 10.10.10.20; };
+};

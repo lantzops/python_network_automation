@@ -1,0 +1,5 @@
+zone "d522.wgu.internal" {
+    type slave;
+    file "/var/cache/bind/db.d522.wgu.internal";
+    masters { 10.10.10.10; };
+};
