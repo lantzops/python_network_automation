@@ -1,22 +1,34 @@
 import csv
-import subprocess
-import platform 
 from datetime import datetime
 from ipaddress import ip_address
-import paramiko 
-import re
-import socket
+from pathlib import Path
+import paramiko
 
 NETWORK_DEVICE_FILE = "network_devices.csv"
-RESULTS_FILE = "device_status_results"
-
-ROUTER_IP = "10.10.10.1"
-ROUTER_USERNAME = "vyos"
-ROUTER_PASSWORD = "vyos"
-DHCP_LEASE_COMMAND = "/opt/vyatta/bin/vyatta-op-cmd-wrapper show dhcp server leases"
-
-SMTP_SERVICE_PORT = 1025
+RESULTS_FILE = "record-config.txt"
 SSH_PORT = 22
+BACKUP_ROOT = "DNS-Backup" 
+DNS_SERVER_NAMES = ["DNS1", "DNS2"]
+BIND_CONFIG_FILES = [
+    "/etc/bind/named.conf",
+    "/etc/bind/named.conf.options",
+    "/etc/bind/named.conf.local",
+    "/etc/bind/named.conf.default-zones",
+]
+DNS1_ZONE_FILES = [
+    "/etc/bind/zones/db.d522.wgu.internal",
+    "/etc/bind/zones/db.10.10.10",
+    "/etc/bind/zones/db.20.168.192",
+    "/etc/bind/zones/db.30.168.192",
+]
+DNS2_ZONE_FILE = "/var/cache/bind/db.d522.wgu.internal"
+DNS2_ZONE_EXPORT_COMMAND = (
+    "sudo -n named-compilezone -q -f raw -F text -o - "
+    f"d522.wgu.internal {DNS2_ZONE_FILE}"
+)
+BACKUP_SUBDIRECTORIES = {"DNS1": "Server-1", "DNS2": "Server-2",}
+
+
 
 def is_valid_ipv4(address: str) -> bool:
     try:
@@ -25,229 +37,190 @@ def is_valid_ipv4(address: str) -> bool:
         return False
 
 def run_remote_command(client, command):
-    stdin, stdout, stderr = client.exec_command(command)
-
-    output = stdout.read().decode().strip()
-    error = stderr.read().decode().strip()
-
-    stdin.close()
-    stdout.close()
-    stderr.close()
-
-    return output, error 
-
-def get_dhcp_leases_from_vyos():
-    client = None
-    dhcp_leases = {}
-
+    stdin, stdout, stderr = client.exec_command(command, timeout=10)
     try:
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        client.connect(
-                hostname=ROUTER_IP,
-                port=SSH_PORT,
-                username=ROUTER_USERNAME,
-                password=ROUTER_PASSWORD,
-                timeout=10,
-                look_for_keys=False,
-                allow_agent=False,
-        )
-        output, error = run_remote_command(client, DHCP_LEASE_COMMAND)
-
-        if error:
-            raise RuntimeError(error)
-
-        for line in output.splitlines():
-            tokens = line.split()
-            if len(tokens) < 11:
-                continue
-            ip = tokens[0]
-            status = tokens[2]
-            hostname = tokens[-2]
-
-            if not is_valid_ipv4(ip):
-                continue
-            if status.lower() != "active":
-                continue
-
-            dhcp_leases[hostname.upper()] = ip
-
-            
-    except Exception as error:
-        print(f"DHCP Lease Check Failed: {error}")
-
+        output = stdout.read().decode().strip()
+        error = stderr.read().decode().strip()
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            raise RuntimeError(
+                f"Remote command failed (exit {exit_status}): {error or command}"
+            )
+        return output, error
     finally:
-        if client:
-            client.close()
-
-    return dhcp_leases
-
+        stdin.close()
+        stdout.close()
+        stderr.close()
 
 now = datetime.now()
 timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
 
-APPROVED_DNS_SERVERS = {"10.10.10.10", "10.10.10.20", "127.0.0.1"}
-
-print("Device Status and DNS Verification")
-print("Checked at:", timestamp_str)
-print(f"{'Device':<10} {'Address' :<16} {'Ping Status':<14} DNS Status")
+print("DNS Configuration Backup")
+print("Started at:", timestamp_str)
 print("-" * 80)
 
-ping_count_flag = "-n" if platform.system().lower() == "windows" else "-c"
+dns_servers = []
 
-dhcp_leases = get_dhcp_leases_from_vyos()
-
-with open("network_devices.csv") as infile, \
-     open("device_status_results.csv", "w", newline='') as outfile:   
-    
-    reader = csv.DictReader(infile)
-
-    fieldnames = ["Device Name", "Device Address", "Ping Status", 
-                 "DNS Status", "Checked At"]
-    writer = csv.DictWriter(outfile, fieldnames=fieldnames)
-    writer.writeheader()
+with open(NETWORK_DEVICE_FILE) as file:    
+    reader = csv.DictReader(file)
 
     for row in reader:
-        address = row["Device Address"].strip()
-        name = row["Device Name"].strip()
-        os = row["OS"].strip()
-        port_name = row["Access Port"].strip()
-        username = row["Username"].strip()
-        password = row["Password"].strip()
+        if row["Device Name"].strip() in DNS_SERVER_NAMES:
+            dns_servers.append(row)
 
-        if address == "DHCP":
-            address = dhcp_leases.get(name.upper(), "DHCP")
+for expected_name in DNS_SERVER_NAMES:
+    matches = [
+        server for server in dns_servers
+        if server["Device Name"].strip() == expected_name
+    ]
+    if len(matches) != 1:
+        raise SystemExit(
+            f"Expected exactly one {expected_name} row; found {len(matches)}"
+        )
+    if not is_valid_ipv4(matches[0]["Device Address"].strip()):
+        raise SystemExit(f"Invalid IPv4 address for {expected_name}")
 
+for server in dns_servers:
+    name = server["Device Name"].strip()
+    address = server["Device Address"].strip()
+    username = server["Username"].strip()
+    password = server["Password"].strip()
+    subdirectory = BACKUP_SUBDIRECTORIES[name]
 
-        if address == "DHCP":
-            ping_status = "Skipped"
-            dns_status = "DHCP lease unavailable; DNS not verified"
-        elif address == "None":
-            ping_status = "Skipped"
-            dns_status = "Skipped - No IP Address"
-        elif name == "SMTP":
-            try:
-                with socket.create_connection((address, 1025), timeout=5):
-                    ping_status = "Reachable"
-                    dns_status = "SMTP service reachable on port 1025; DNS shell check unavailable"
-            except OSError as error:
-                ping_status = f"Unreachable: {error}"
-                dns_status = "DNS not verified; SMTP connection failed"
-
-        elif is_valid_ipv4(address):
-            try:
-                process_result = subprocess.run(
-                        ["ping", ping_count_flag, "1", address],
-                        capture_output=True,
-                        text=True,
-                        timeout=9
-                        )
-
-                if process_result.returncode == 0:
-                    ping_status = "Reachable"
-                    client = None
-
-                    try:
-                        if os.lower() == "ubuntu":
-                            client = paramiko.SSHClient()
-                            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                            client.connect(
-                                    hostname=address,
-                                    port=22,
-                                    username=username,
-                                    password=password,
-                                    timeout=10,
-                                    look_for_keys=False,
-                                    allow_agent=False,)
-                            stdin, stdout, stderr = client.exec_command("resolvectl dns")
-                            command_output = stdout.read().decode().strip()
-                            command_error = stderr.read().decode().strip()
-
-                            if command_output:
-                                clean_dns_output = " | ".join(command_output.splitlines())
-                                dns_status = clean_dns_output
-                                dns_servers_found = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", dns_status)
-                                unauthorized_dns = [
-                                        server for server in dns_servers_found
-                                        if server not in APPROVED_DNS_SERVERS
-                                        ]
-                                if unauthorized_dns:
-                                    dns_status = f"{dns_status} | Unauthorized DNS detected: {', '.join(unauthorized_dns)}"
-
-                            elif command_error:
-                                fallback_output, fallback_error = run_remote_command(
-                                    client, "cat /etc/resolv.conf"
-                                )
-
-                                if fallback_error:
-                                    dns_status = f"DNS verification failed: {fallback_error}"
-                                else:
-                                    dns_servers_found = []
-
-                                    for line in fallback_output.splitlines():
-                                        fields = line.split()
-                                        if len(fields) >= 2 and fields[0] == "nameserver":
-                                            dns_servers_found.append(fields[1])
-
-                                    if dns_servers_found:
-                                        dns_status = f"/etc/resolv.conf: {', '.join(dns_servers_found)}"
-
-                                        unauthorized_dns = [
-                                            server for server in dns_servers_found
-                                            if server not in APPROVED_DNS_SERVERS
-                                        ]
-
-                                        if unauthorized_dns:
-                                            dns_status += (
-                                                f" | Unauthorized DNS detected: {', '.join(unauthorized_dns)}"
-                                            )
-                                    else:
-                                        dns_status = "DNS not verified; no nameserver entries found"
-
-                            else:
-                                dns_status = "DNS settings not found"
-                        
-                        elif os == "VyOS":
-                            dns_status = "Skipped - DNS command not supported for VyOS"
-
-                        else:
-                            dns_status = f"Skipped - no supported DNS Verification Method"
-
-                    except Exception as error:
-                        dns_status = f"DNS check failed: {error}"
-
-                    finally:
-                        if client:
-                            client.close()
+    client = None
+    sftp = None
 
 
-                else:
-                    ping_status = "Unreachable"
-                    dns_status = "Not verified - device unreachable"
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(
+            hostname=address,
+            port=SSH_PORT,
+            username=username,
+            password=password,
+            timeout=10,
+            look_for_keys=False,
+            allow_agent=False,
+        )
 
-            except subprocess.TimeoutExpired:
-                ping_status = "Timeout"
-                dns_status = "Not Verified - ping timeout"
-            
-        else:
-            ping_status = "Skipped"
-            dns_status = "Skipped - invalid ipv4 address"
+        backup_directory = Path(BACKUP_ROOT) / subdirectory
+        backup_directory.mkdir(parents=True, exist_ok=True)
+
+        summary_sections = []
+        files_to_copy = BIND_CONFIG_FILES.copy()
+
+        for remote_path in BIND_CONFIG_FILES:
+            output, error = run_remote_command(
+                client, f"sudo -n cat {remote_path}"
+            )
+
+            if error:
+                raise RuntimeError(f"Could not read {remote_path}: {error}")
+
+            if not output.strip():
+                raise RuntimeError(f"No content returned from {remote_path}")
+
+            summary_sections.append(
+                f"====== {remote_path} ======\n{output}\n"
+            )
+
+        if name == "DNS1":
+            files_to_copy.extend(DNS1_ZONE_FILES)
+
+            for path in DNS1_ZONE_FILES:
+                output, error = run_remote_command(client, f"sudo -n cat {path}" )
+                
+                if error:
+                    raise RuntimeError(f"Could not read {path}: {error}")
+
+                if not output.strip():
+                    raise RuntimeError(f"No content returned from {path}")
+
+                summary_sections.append(
+                    f"====== {path} ======\n{output}\n"
+                )
+
+        elif name == "DNS2":
+            files_to_copy.append(DNS2_ZONE_FILE)
+
+            output, error = run_remote_command(
+                    client, DNS2_ZONE_EXPORT_COMMAND
+            )
+
+            if error:
+                raise RuntimeError(
+                    f"Could not read {DNS2_ZONE_FILE}: {error}"
+                )
+
+            if not output.strip():
+                raise RuntimeError(
+                    f"No content returned from {DNS2_ZONE_FILE}"
+                )
+
+            summary_sections.append(
+                f"====== {DNS2_ZONE_FILE} (converted from raw to text) ======\n"
+                f"{output}\n"
+            )
+
+        sftp = client.open_sftp()
+
+        for remote_path in files_to_copy:
+            relative_path = remote_path.lstrip("/")
+            local_path = backup_directory / "files" / relative_path
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if local_path.exists():
+                raise FileExistsError(
+                        f"Backup already exists: {local_path}"
+                )
+
+            sftp.get(remote_path, str(local_path))
+
+            remote_size = sftp.stat(remote_path).st_size
+            local_size = local_path.stat().st_size
+
+            if local_size != remote_size:
+                raise RuntimeError(
+                        f"Backup size mismatch: {local_path}")
+
+        backup_file = backup_directory / RESULTS_FILE
+
+        header = (
+                f"Server: {name}\n"
+                f"Address: {address}\n"
+                f"Backup timestamp: {timestamp_str}\n\n"
+        )
+
+        summary_text = header + "\n".join(summary_sections)
+
+        with backup_file.open("x", encoding="utf-8") as file:
+            file.write(summary_text)
 
 
-        print(f"{name:<10} {address:<16} {ping_status:<14} {dns_status}")
+        if backup_file.read_text(encoding="utf-8") != summary_text:
+            raise RuntimeError(f"Backup verification failed: {backup_file}")
 
-        writer.writerow({
-            "Device Name": name,
-            "Device Address": address,
-            "Ping Status": ping_status,
-            "DNS Status": dns_status,
-            "Checked At": timestamp_str
-        })
+        print(f"Server: {name} ({address})")
+        print(f"Backup saved: {backup_file.resolve()}")
+        print("Result: SUCCESS")
+        print("-" * 80)
 
-print("Results have been saved to 'device_status_results.csv'")
+    except Exception as error:
+        print(f"Backup failed for {name}: {error}")
 
+    finally:
+        try:
+            if sftp is not None:
+                sftp.close()
+        finally:
+            if client is not None:
+                client.close()
+
+
+    
+                
 
             
                 
@@ -260,4 +233,3 @@ print("Results have been saved to 'device_status_results.csv'")
 
 
                 
-
