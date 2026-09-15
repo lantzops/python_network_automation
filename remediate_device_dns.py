@@ -6,9 +6,12 @@ from ipaddress import ip_address
 
 ALLOWED_DNS_SERVERS = {"10.10.10.10", "10.10.10.20", "127.0.0.1"}
 REPLACEMENT_DNS_SERVERS = ["10.10.10.10", "10.10.10.20"]
+REMOTE_COMMAND_TIMEOUT_SECONDS = 60
 
 def run_remote_command(client, command):
-    stdin, stdout, stderr = client.exec_command(command, timeout=10)
+    stdin, stdout, stderr = client.exec_command(
+        command, timeout=REMOTE_COMMAND_TIMEOUT_SECONDS
+    )
 
     try:
         output = stdout.read().decode().strip()
@@ -16,6 +19,8 @@ def run_remote_command(client, command):
         exit_status = stdout.channel.recv_exit_status()
         if exit_status != 0:
             raise RuntimeError(f"Remote command failed (exit {exit_status}): {error or command}")
+        if error:
+            print(f"Remote command warning (exit 0): {error}")
         return output, error
     finally:
         stdin.close()
@@ -55,8 +60,6 @@ def remediate_device_dns(device, username, password):
         print("Before DNS settings:")
         print(before_output)
 
-        if before_error:
-            raise RuntimeError(f"Before check error: {before_error}")
         
         nameservers = []
 
@@ -102,8 +105,6 @@ def remediate_device_dns(device, username, password):
         backup_output, backup_error = run_remote_command(
             client, f"sudo -n cp -p /etc/resolv.conf {backup_path}"
         )
-        if backup_error:
-            raise RuntimeError(f"DNS backup failed: {backup_error}")
         print(f"Backup saved on device: {backup_path}")
 
         replacement_commands = []
@@ -122,16 +123,12 @@ def remediate_device_dns(device, username, password):
         for command in replacement_commands:
             output, error = run_remote_command(client, command)
 
-            if error:
-                raise RuntimeError(f"Replacement error: {error}")
  
         after_output, after_error = run_remote_command(client, "cat /etc/resolv.conf")
 
         print("After DNS settings:")
         print(after_output)
 
-        if after_error:
-            raise RuntimeError(f"After check error: {after_error}")
 
         nameservers = []
         for line in after_output.splitlines():
@@ -163,7 +160,7 @@ def remediate_device_dns(device, username, password):
         return True
         
     except Exception as error:
-        print(f"DNS update failed for {name}: {error}")
+        print(f"DNS update failed for {name}: {type(error).__name__}: {error!r}")
         return False
 
     finally:
