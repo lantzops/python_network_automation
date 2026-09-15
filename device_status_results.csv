@@ -1,17 +1,17 @@
-Device Name,Device Address,Ping Status,DNS Status,Checked At
-API,10.10.10.200,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 19:27:50
-DB,10.10.10.210,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 19:27:50
-DNS1,10.10.10.10,Reachable,Global: 127.0.0.1 | Link 2 (ens3): 10.10.10.20 127.0.0.1,2026-09-11 19:27:50
-DNS2,10.10.10.20,Reachable,Global: 127.0.0.1 | Link 2 (ens3): 10.10.10.10 127.0.0.1,2026-09-11 19:27:50
-PC1,192.168.10.102,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 19:27:50
-PC2,192.168.20.101,Reachable,/etc/resolv.conf: 10.10.10.10,2026-09-11 19:27:50
-PC3,192.168.30.101,Reachable,/etc/resolv.conf: 10.10.10.10,2026-09-11 19:27:50
-PC4,192.168.10.101,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,2026-09-11 19:27:50
-ROUTER1,10.10.10.1,Reachable,Skipped - DNS command not supported for VyOS,2026-09-11 19:27:50
-SMTP,10.10.10.100,Reachable,SMTP service reachable on port 1025; DNS shell check unavailable,2026-09-11 19:27:50
-SVR1,192.168.20.210,Reachable,/etc/resolv.conf: 10.10.10.10,2026-09-11 19:27:50
-SVR2,192.168.30.210,Reachable,/etc/resolv.conf: 10.10.10.10,2026-09-11 19:27:50
-SW1,None,Skipped,Skipped - No IP Address,2026-09-11 19:27:50
-SW2,None,Skipped,Skipped - No IP Address,2026-09-11 19:27:50
-SW3,None,Skipped,Skipped - No IP Address,2026-09-11 19:27:50
-SW4,None,Skipped,Skipped - No IP Address,2026-09-11 19:27:50
+Device Name,Device Address,Ping Status,DNS Status,DNS Check Status,DNS Resolution Verified,DNS Resolution Detail,Checked At
+API,10.10.10.200,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+DB,10.10.10.210,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+DNS1,10.10.10.10,Reachable,Global: 127.0.0.1 | Link 2 (ens3): 10.10.10.20 127.0.0.1,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+DNS2,10.10.10.20,Reachable,Global: 127.0.0.1 | Link 2 (ens3): 10.10.10.10 127.0.0.1,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+PC1,192.168.10.101,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+PC2,192.168.20.100,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+PC3,192.168.30.101,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+PC4,192.168.10.102,Reachable,Global: | Link 2 (ens3): 10.10.10.10 10.10.10.20,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+ROUTER1,10.10.10.1,Reachable,Skipped - DNS command not supported for VyOS,unverified,False,Not tested; approved DNS configuration required,2026-09-15 07:21:41
+SMTP,10.10.10.100,Reachable,SMTP service reachable on port 1025; DNS shell check unavailable,unverified,False,Not tested; approved DNS configuration required,2026-09-15 07:21:41
+SVR1,192.168.20.210,Reachable,/etc/resolv.conf: 10.10.10.10,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+SVR2,192.168.30.210,Reachable,/etc/resolv.conf: 10.10.10.10,approved,True,helpdesk.d522.wgu.internal resolved to 10.10.10.200,2026-09-15 07:21:41
+SW1,None,Skipped,Skipped - No IP Address,unverified,False,Not tested; approved DNS configuration required,2026-09-15 07:21:41
+SW2,None,Skipped,Skipped - No IP Address,unverified,False,Not tested; approved DNS configuration required,2026-09-15 07:21:41
+SW3,None,Skipped,Skipped - No IP Address,unverified,False,Not tested; approved DNS configuration required,2026-09-15 07:21:41
+SW4,None,Skipped,Skipped - No IP Address,unverified,False,Not tested; approved DNS configuration required,2026-09-15 07:21:41
