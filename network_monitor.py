@@ -7,16 +7,20 @@ from ipaddress import ip_address
 import paramiko 
 import re
 import socket
+import shlex
 from monitor_tickets import create_ticket, resolve_ticket
 from monitor_email import send_unavailable_email
 from dns_altered_alert import send_dns_altered_email
 from remediate_device_dns import remediate_device_dns
+from monitor_log import log_healthy_dns
 import time
 
 CHECK_INTERVAL_SECONDS = 60
 MAX_EMAIL_ATTEMPTS = 3
 NETWORK_DEVICE_FILE = "network_devices.csv"
 RESULTS_FILE = "device_status_results.csv"
+DNS_TEST_HOSTNAME = "helpdesk.d522.wgu.internal"
+DNS_TEST_EXPECTED_IP = "10.10.10.200"
 
 ROUTER_IP = "10.10.10.1"
 ROUTER_USERNAME = "vyos"
@@ -128,7 +132,8 @@ def check_devices_run():
         reader = csv.DictReader(infile)
 
         fieldnames = ["Device Name", "Device Address", "Ping Status", 
-                     "DNS Status", "DNS Check Status", "Checked At"]
+                     "DNS Status", "DNS Check Status", "DNS Resolution Verified",
+                     "DNS Resolution Detail", "Checked At"]
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
         writer.writeheader()
 
@@ -140,6 +145,8 @@ def check_devices_run():
             username = row["Username"].strip()
             password = row["Password"].strip()
             dns_check_status = DNSStatus.UNVERIFIED
+            dns_resolution_verified = False
+            dns_resolution_detail = "Not tested; approved DNS configuration required"
 
             if address == "DHCP":
                 address = dhcp_leases.get(name.upper(), "DHCP")
@@ -241,6 +248,34 @@ def check_devices_run():
 
                                 else:
                                     dns_status = "DNS settings not found"
+
+                                if dns_check_status == DNSStatus.APPROVED:
+                                    try:
+                                        # dig uses DNS rather than a possible /etc/hosts entry.
+                                        lookup_output, lookup_error = run_remote_command(
+                                            client,
+                                            "dig +short +time=2 +tries=1 "
+                                            f"{shlex.quote(DNS_TEST_HOSTNAME)} A",
+                                        )
+                                        answers = {
+                                            line.strip() for line in lookup_output.splitlines()
+                                            if is_valid_ipv4(line.strip())
+                                        }
+                                        dns_resolution_verified = (
+                                            not lookup_error
+                                            and answers == {DNS_TEST_EXPECTED_IP}
+                                        )
+                                        if dns_resolution_verified:
+                                            dns_resolution_detail = (
+                                                f"{DNS_TEST_HOSTNAME} resolved to {DNS_TEST_EXPECTED_IP}"
+                                            )
+                                        else:
+                                            dns_resolution_detail = (
+                                                "DNS lookup not verified: "
+                                                f"{lookup_error or lookup_output or 'no A records returned'}"
+                                            )
+                                    except Exception as error:
+                                        dns_resolution_detail = f"DNS lookup failed: {error}"
                             
                             elif os == "VyOS":
                                 dns_status = "Skipped - DNS command not supported for VyOS"
@@ -271,6 +306,8 @@ def check_devices_run():
 
 
             print(f"{name:<10} {address:<16} {ping_status:<14} {dns_status}")
+            if dns_check_status == DNSStatus.APPROVED:
+                print(f"  DNS resolution: {dns_resolution_detail}")
 
             result = {
                 "Device Name": name,
@@ -278,6 +315,8 @@ def check_devices_run():
                 "Ping Status": ping_status,
                 "DNS Status": dns_status,
                 "DNS Check Status": dns_check_status.value,
+                "DNS Resolution Verified": dns_resolution_verified,
+                "DNS Resolution Detail": dns_resolution_detail,
                 "Checked At": timestamp_str
             }
             writer.writerow(result)
@@ -316,6 +355,8 @@ def process_dns_result(device, dns_incidents, incident_history):
         return
 
     if status == DNSStatus.APPROVED.value:
+        log_healthy_dns(device)
+
         if incident and incident["state"] == IncidentState.ACTIVE:
             incident["state"] = IncidentState.RECOVERED
             incident["recovered_at"] = device["Checked At"]
