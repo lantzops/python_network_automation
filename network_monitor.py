@@ -7,7 +7,7 @@ from ipaddress import ip_address
 import paramiko 
 import re
 import socket
-from monitor_tickets import create_ticket
+from monitor_tickets import create_ticket, resolve_ticket
 from monitor_email import send_unavailable_email
 from dns_altered_alert import send_dns_altered_email
 from remediate_device_dns import remediate_device_dns
@@ -286,6 +286,26 @@ def check_devices_run():
     print("Results have been saved to 'device_status_results.csv'")
     return results
 
+def resolve_dns_incident_ticket(incident):
+    if incident["ticket_resolution_attempted"]:
+        return
+
+    incident["ticket_resolution_attempted"] = True
+    ticket_id = incident["ticket_id"]
+
+    if ticket_id is None:
+        incident["ticket_resolution_needs_review"] = True
+        print("DNS recovered, but no ticket ID is available; review needed.")
+        return
+
+    incident["ticket_resolved"] = resolve_ticket(ticket_id)
+    incident["ticket_resolution_needs_review"] = (
+        not incident["ticket_resolved"]
+    )
+
+    if incident["ticket_resolution_needs_review"]:
+        print(f"DNS recovered, but ticket {ticket_id} needs resolution review.")
+
 def process_dns_result(device, dns_incidents, incident_history):
     name = device["Device Name"]
     status = device.get("DNS Check Status", DNSStatus.UNVERIFIED.value)
@@ -299,7 +319,8 @@ def process_dns_result(device, dns_incidents, incident_history):
         if incident and incident["state"] == IncidentState.ACTIVE:
             incident["state"] = IncidentState.RECOVERED
             incident["recovered_at"] = device["Checked At"]
-            print(f"DNS configuration verified approved for {name}; ticket update still pending.")
+            resolve_dns_incident_ticket(incident)
+            print(f"DNS configuration verified approved for {name}.")
         return
 
     if status != DNSStatus.UNAUTHORIZED.value:
@@ -322,6 +343,9 @@ def process_dns_result(device, dns_incidents, incident_history):
         "remediation_attempted": False,
         "remediation_verified": False,
         "remediation_needs_review": False,
+        "ticket_resolved": False,
+        "ticket_resolution_attempted": False,
+        "ticket_resolution_needs_review": False,
     }
     dns_incidents[name] = incident
 
@@ -359,7 +383,8 @@ def process_dns_result(device, dns_incidents, incident_history):
     if verified is True:
         incident["state"] = IncidentState.RECOVERED
         incident["recovered_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"DNS file settings verified for {name}; helpdesk ticket update still pending.")
+        resolve_dns_incident_ticket(incident)
+        print(f"DNS file settings verified for {name}.")
     else:
         incident["remediation_needs_review"] = True
         print(f"DNS remediation for {name} needs review; automatic retries paused.")
