@@ -5,7 +5,7 @@ import urllib.error
 from datetime import datetime
 from http.client import HTTPException
 
-API_URL = "http://helpdesk.d522.wgu.internal:5000/api/tickets"
+## API_URL = 
 TOKEN_ENV_VAR = "HELPDESK_API_TOKEN"
 
 def resolve_ticket(ticket_id):

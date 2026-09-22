@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-API_URL = "http://helpdesk.d522.wgu.internal:5000/api/tickets"
+## API_URL =
 TOKEN_ENV_VAR = "HELPDESK_API_TOKEN"
 
 api_token = os.environ.get(TOKEN_ENV_VAR)
